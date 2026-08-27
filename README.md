@@ -8,6 +8,23 @@ Open `index.html` in a browser (double-click it, or drag it into Chrome / Safari
 
 Progress is saved in that browser on this computer.
 
+## Do the course on your phone
+
+The course is a plain static site, so publishing it is enough to study on a phone.
+
+1. Push this folder to GitHub.
+2. In the repository, go to **Settings → Pages**, pick **Deploy from a branch**, branch `main`, folder `/ (root)`, and save. (Pages needs a public repository unless you have a paid plan.)
+3. After a minute the course is live at `https://<your-user>.github.io/<repo>/`. Open that link on the phone.
+4. Add it to the home screen so it opens like an app, without a browser bar:
+   - **iPhone (Safari):** Share → *Add to Home Screen*
+   - **Android (Chrome):** ⋮ → *Add to home screen*
+
+Once a page has loaded, everything is cached and **the whole course works offline** — on a plane, on the metro, anywhere. Only the ▶ pronunciation button can need a connection, because some phones stream their Spanish voice.
+
+Two people can each use their own phone: progress lives on the device, so nobody overwrites anybody. That also means progress does not sync between phones, and clearing browser data resets it.
+
+After editing any course file, bump `VERSION` in `sw.js`. Phones keep serving the cached copy until that string changes.
+
 ## What you will be able to do
 
 - Greet people, spell your name, and use *tú* / *usted*

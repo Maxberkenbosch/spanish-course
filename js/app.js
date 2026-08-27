@@ -152,8 +152,8 @@ function renderShell(mainHtml) {
   document.getElementById("app").innerHTML = `
     <div class="overlay${state.menuOpen ? " show" : ""}" data-close-menu></div>
     <div class="app">
-      <aside class="sidebar${state.menuOpen ? " open" : ""}">
-        <a class="brand" href="#/">
+      <aside class="sidebar${state.menuOpen ? " open" : ""}" id="sidebar">
+        <a class="brand" href="#/" data-go="#/">
           <small>CEFR beginner</small>
           <strong>Camino A1</strong>
         </a>
@@ -172,20 +172,25 @@ function renderShell(mainHtml) {
       </aside>
       <main class="main">
         <div class="topbar">
-          <button class="menu-btn" data-toggle-menu type="button">Menu</button>
+          <button class="menu-btn" data-toggle-menu type="button" aria-controls="sidebar" aria-expanded="${state.menuOpen}">Menu</button>
+          <span class="topbar-progress">${stats.pct}% done</span>
         </div>
         ${mainHtml}
       </main>
     </div>
   `;
+  document.documentElement.classList.toggle("menu-open", state.menuOpen);
   bindGlobal();
 }
 
 function bindGlobal() {
   document.querySelectorAll("[data-go]").forEach((b) => {
     b.addEventListener("click", () => {
+      const target = b.getAttribute("data-go");
       state.menuOpen = false;
-      go(b.getAttribute("data-go"));
+      // Tapping the page you are already on fires no hashchange, so redraw by hand.
+      if (target === (location.hash || "#/")) render({ scrollToTop: true });
+      else go(target);
     });
   });
   document.querySelectorAll("[data-toggle-menu]").forEach((b) => {
@@ -590,7 +595,11 @@ function renderVerbs() {
     </div>
   `);
   const input = document.getElementById("verb-in");
-  input.focus();
+  // On a phone, only grab focus mid-drill: opening the keyboard on arrival is jarring.
+  if (state.verb.focusInput || !matchMedia("(pointer: coarse)").matches) {
+    input.focus({ preventScroll: true });
+  }
+  state.verb.focusInput = false;
   const check = () => {
     const ok = checkType(input.value, [v.forms[person]]);
     state.verb.streak = ok ? state.verb.streak + 1 : 0;
@@ -605,16 +614,11 @@ function renderVerbs() {
 function nextVerb() {
   state.verb.i += 1;
   state.verb.person = Math.floor(Math.random() * 6);
+  state.verb.focusInput = true;
   render();
 }
 
-function render() {
-  const route = parseHash();
-  state.view = route.view;
-  state.unitId = route.unitId || null;
-  state.lessonId = route.lessonId || null;
-  state.menuOpen = state.menuOpen && window.innerWidth <= 860;
-
+function renderRoute(route) {
   if (route.view === "how") return renderHow();
   if (route.view === "phrasebook") return renderPhrasebook();
   if (route.view === "verbs") return renderVerbs();
@@ -634,6 +638,32 @@ function render() {
   renderHome();
 }
 
+function markScrollableTables() {
+  document.querySelectorAll(".table-wrap").forEach((wrap) => {
+    wrap.classList.toggle("is-scrollable", wrap.scrollWidth > wrap.clientWidth + 1);
+  });
+}
+
+let lastRouteKey = null;
+
+function render({ scrollToTop = false } = {}) {
+  const route = parseHash();
+  state.view = route.view;
+  state.unitId = route.unitId || null;
+  state.lessonId = route.lessonId || null;
+  state.menuOpen = state.menuOpen && window.innerWidth <= 860;
+
+  const routeKey = [route.view, route.unitId, route.lessonId].join("|");
+  const routeChanged = routeKey !== lastRouteKey;
+  lastRouteKey = routeKey;
+
+  renderRoute(route);
+  markScrollableTables();
+
+  // A new page starts at the top; opening the menu or answering a drill must not jump.
+  if (routeChanged || scrollToTop) window.scrollTo(0, 0);
+}
+
 window.addEventListener("hashchange", () => {
   state.menuOpen = false;
   render();
@@ -642,7 +672,29 @@ window.addEventListener("resize", () => {
   if (window.innerWidth > 860 && state.menuOpen) {
     state.menuOpen = false;
     render();
+    return;
+  }
+  markScrollableTables();
+});
+window.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && state.menuOpen) {
+    state.menuOpen = false;
+    render();
   }
 });
 
 render();
+
+if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
+  const hadController = Boolean(navigator.serviceWorker.controller);
+  let reloading = false;
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    // Only reload when a newer worker replaces an old one, not on first install.
+    if (!hadController || reloading) return;
+    reloading = true;
+    location.reload();
+  });
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("./sw.js").catch(() => {});
+  });
+}
