@@ -1,5 +1,4 @@
-// Bump VERSION after changing any course file so phones pick the update up.
-const VERSION = "v1";
+const VERSION = "v2";
 const SHELL_CACHE = `camino-shell-${VERSION}`;
 const FONT_CACHE = `camino-fonts-${VERSION}`;
 const KEEP = [SHELL_CACHE, FONT_CACHE];
@@ -48,19 +47,19 @@ async function cachePut(cacheName, request, response) {
   await cache.put(request, response.clone());
 }
 
-// Serve the cached copy at once, refresh it in the background.
-async function staleWhileRevalidate(request, cacheName) {
-  const cached = await caches.match(request);
-  const network = fetch(request)
-    .then((response) => {
-      cachePut(cacheName, request, response);
-      return response;
-    })
-    .catch(() => null);
-  if (cached) return cached;
-  const response = await network;
-  if (response) return response;
-  return new Response("Offline and not cached.", { status: 504, statusText: "Offline" });
+// Online: always take the live file, then store it for offline.
+// Offline: serve the last saved copy.
+async function networkFirst(request, cacheName) {
+  try {
+    const response = await fetch(request, { cache: "no-cache" });
+    await cachePut(cacheName, request, response);
+    return response;
+  } catch {
+    return (
+      (await caches.match(request)) ||
+      new Response("Offline and not cached.", { status: 504, statusText: "Offline" })
+    );
+  }
 }
 
 async function cacheFirst(request, cacheName) {
@@ -78,7 +77,7 @@ async function cacheFirst(request, cacheName) {
 // The app is a single document with hash routing, so any navigation resolves to the shell.
 async function documentResponse(request) {
   try {
-    const response = await fetch(request);
+    const response = await fetch(request, { cache: "no-cache" });
     cachePut(SHELL_CACHE, request, response);
     return response;
   } catch {
@@ -103,7 +102,7 @@ self.addEventListener("fetch", (event) => {
     return;
   }
   if (url.origin === self.location.origin) {
-    event.respondWith(staleWhileRevalidate(request, SHELL_CACHE));
+    event.respondWith(networkFirst(request, SHELL_CACHE));
     return;
   }
   if (FONT_HOSTS.has(url.hostname)) {

@@ -23,7 +23,7 @@ Once a page has loaded, everything is cached and **the whole course works offlin
 
 Two people can each use their own phone: progress lives on the device, so nobody overwrites anybody. That also means progress does not sync between phones, and clearing browser data resets it.
 
-After editing any course file, bump `VERSION` in `sw.js`. Phones keep serving the cached copy until that string changes.
+When a phone has internet, it loads the latest files from the URL. Open the app once online after you push and both phones see the new version. Offline they keep the last copy they successfully downloaded.
 
 ## What you will be able to do
 

@@ -694,7 +694,18 @@ if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
     reloading = true;
     location.reload();
   });
+
+  function checkForUpdate() {
+    navigator.serviceWorker.getRegistration().then((reg) => {
+      if (reg) reg.update();
+    }).catch(() => {});
+  }
+
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("./sw.js").catch(() => {});
+    navigator.serviceWorker.register("./sw.js").then(checkForUpdate).catch(() => {});
+  });
+  // Opening the home-screen app again should look for a newer course.
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") checkForUpdate();
   });
 }
