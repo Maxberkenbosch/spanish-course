@@ -409,8 +409,18 @@ th { background: #efe6d4; font-size: 14px; }
 }
 
 .option.selected, .match-item.selected { border-color: var(--brick); background: #f8ece7; }
-.option.correct, .result.ok { background: var(--ok-bg); border-color: var(--ok); }
-.option.wrong, .result.bad { background: var(--bad-bg); border-color: var(--bad); }
+.option.correct, .match-item.correct, .result.ok { background: var(--ok-bg); border-color: var(--ok); }
+.option.wrong, .match-item.wrong, .result.bad { background: var(--bad-bg); border-color: var(--bad); }
+
+.match-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.match-item { text-align: center; }
+.match-item:disabled { cursor: default; opacity: 0.75; }
 
 input[type="text"], textarea {
   width: 100%;

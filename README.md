@@ -48,6 +48,14 @@ A1 is about **50–70 hours** of real work.
 
 Daily plan that works: **45 minutes a day for about 10 weeks**, or 90 minutes a day for 5 weeks.
 
+### Practice and quiz do different jobs
+
+**Practice** drills the machinery: pairing words with their meaning, verb endings, articles, and short answers. Repeat it as often as you like.
+
+**Quiz** is the checkpoint. Every item puts you in a situation ("you step on someone's foot in the metro"), asks you to spot a wrong sentence, or asks for a whole sentence in Spanish. Nothing is copied from the practice set, so a good score means you can actually use the unit rather than remember the drill.
+
+If you edit the exercises, run `node tools/check-course.mjs`. It fails if practice, quiz and the exam start repeating each other, or if an item is broken (answer index out of range, scrambled sentence that cannot be rebuilt, and so on).
+
 ## Course map
 
 | Unit | Topic |

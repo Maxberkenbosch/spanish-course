@@ -100,6 +100,25 @@ function checkType(value, answers) {
   return answers.some((a) => norm(a) === n);
 }
 
+function shuffled(list) {
+  const out = list.slice();
+  for (let i = out.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
+}
+
+// A shuffle where nothing keeps its own place, so no word sits next to its answer.
+function shuffledApart(count) {
+  const places = Array.from({ length: count }, (_, n) => n);
+  for (let attempt = 0; attempt < 50; attempt += 1) {
+    const order = shuffled(places);
+    if (order.every((value, n) => value !== n)) return order;
+  }
+  return places.map((n) => (n + 1) % count);
+}
+
 function unitById(id) {
   return COURSE.units.find((u) => u.id === id);
 }
@@ -386,6 +405,18 @@ function renderExercise(ex, i, mode) {
         <button class="btn" data-order-check="${id}">Check</button>
       </div></div>`;
   }
+  if (ex.type === "match") {
+    // Rows are interleaved so both columns line up; the meanings are shuffled.
+    const order = shuffledApart(ex.pairs.length);
+    const cells = ex.pairs.map((pair, n) => {
+      const meaning = ex.pairs[order[n]][1];
+      return `<button class="match-item" type="button" data-match-left="${id}" data-n="${n}">${escapeHtml(pair[0])}</button>
+        <button class="match-item" type="button" data-match-right="${id}" data-n="${order[n]}">${escapeHtml(meaning)}</button>`;
+    }).join("");
+    return `<div class="exercise" id="${id}"><h3>${i + 1}. ${escapeHtml(ex.q)}</h3>
+      <p class="en">Tap a Spanish word, then its meaning.</p>
+      <div class="match-grid">${cells}</div></div>`;
+  }
   return "";
 }
 
@@ -474,6 +505,48 @@ function bindExercises(list, mode, onDone) {
         finishIfReady();
       });
     }
+    if (ex.type === "match") {
+      const lefts = document.querySelectorAll(`[data-match-left="${id}"]`);
+      const rights = document.querySelectorAll(`[data-match-right="${id}"]`);
+      let picked = null;
+      let misses = 0;
+      let solved = 0;
+
+      lefts.forEach((btn) => {
+        btn.addEventListener("click", () => {
+          if (btn.disabled) return;
+          lefts.forEach((b) => b.classList.remove("selected"));
+          btn.classList.add("selected");
+          picked = btn;
+        });
+      });
+
+      rights.forEach((btn) => {
+        btn.addEventListener("click", () => {
+          if (btn.disabled || !picked) return;
+          if (btn.dataset.n !== picked.dataset.n) {
+            misses += 1;
+            btn.classList.add("wrong");
+            setTimeout(() => btn.classList.remove("wrong"), 450);
+            return;
+          }
+          picked.classList.remove("selected");
+          picked.classList.add("correct");
+          btn.classList.add("correct");
+          picked.disabled = true;
+          btn.disabled = true;
+          picked = null;
+          solved += 1;
+          if (solved < ex.pairs.length) return;
+          // The pair only counts as known if it was found first time.
+          answers[i] = misses === 0;
+          markBox(id, misses === 0, misses === 0
+            ? "All matched, no mistakes."
+            : `All matched, but ${misses} wrong ${misses === 1 ? "try" : "tries"}. Review these words.`);
+          finishIfReady();
+        });
+      });
+    }
   });
 }
 
@@ -482,7 +555,7 @@ function renderPractice(unit) {
   renderShell(`
     <p class="kicker">Unit ${unit.num}</p>
     <h1>Practice</h1>
-    <p class="lead">Answer every item. Your score saves when the last one is checked.</p>
+    <p class="lead">Drill the building blocks: word pairs, verb endings, and short answers. Answer every item — your score saves when the last one is checked.</p>
     ${items}
     <div id="practice-score"></div>
     <div class="footer-nav">
