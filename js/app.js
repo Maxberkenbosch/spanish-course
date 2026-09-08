@@ -5,6 +5,8 @@ const state = {
   view: "home",
   unitId: null,
   lessonId: null,
+  storyId: null,
+  storyShowEn: false,
   menuOpen: false,
   quizIndex: 0,
   quizAnswers: [],
@@ -22,7 +24,7 @@ function loadProgress() {
 }
 
 function defaultProgress() {
-  return { lessons: {}, practice: {}, quizzes: {}, exam: null };
+  return { lessons: {}, practice: {}, quizzes: {}, stories: {}, storyPages: {}, exam: null };
 }
 
 function saveProgress(p) {
@@ -49,6 +51,31 @@ function markQuiz(unitId, score, total) {
   const p = progress();
   p.quizzes[unitId] = { score, total };
   saveProgress(p);
+}
+
+// Stories are extra reading, not an A1 requirement, so they stay out of courseStats().
+function markStory(storyId) {
+  const p = progress();
+  p.stories = p.stories || {};
+  p.stories[storyId] = true;
+  saveProgress(p);
+}
+
+function storiesRead() {
+  return Object.keys(progress().stories || {}).length;
+}
+
+// Remembers the furthest chapter opened, so a book reopens where you stopped.
+function markStoryPage(storyId, index) {
+  const p = progress();
+  p.storyPages = p.storyPages || {};
+  if ((p.storyPages[storyId] || 0) >= index) return;
+  p.storyPages[storyId] = index;
+  saveProgress(p);
+}
+
+function storyFurthestPage(storyId) {
+  return (progress().storyPages || {})[storyId] || 0;
 }
 
 function unitDone(unit) {
@@ -138,7 +165,10 @@ function parseHash() {
     if (parts[2] === "lesson" && parts[3]) return { view: "lesson", unitId, lessonId: parts[3] };
     return { view: "unit", unitId };
   }
-  if (["exam", "phrasebook", "verbs", "how"].includes(parts[0])) return { view: parts[0] };
+  if (parts[0] === "story" && parts[1]) {
+    return { view: "story", storyId: parts[1], storyPage: parts[2] ? Number(parts[2]) : null };
+  }
+  if (["exam", "phrasebook", "verbs", "how", "stories"].includes(parts[0])) return { view: parts[0] };
   return { view: "home" };
 }
 
@@ -186,6 +216,7 @@ function renderShell(mainHtml) {
         ${navUnits}
         <div class="nav-label">Tools</div>
         <button class="nav-link${state.view === "phrasebook" ? " active" : ""}" data-go="#/phrasebook">Phrasebook</button>
+        <button class="nav-link${state.view === "stories" || state.view === "story" ? " active" : ""}" data-go="#/stories">Reading</button>
         <button class="nav-link${state.view === "verbs" ? " active" : ""}" data-go="#/verbs">Verb trainer</button>
         <button class="nav-link${state.view === "exam" ? " active" : ""}" data-go="#/exam">Final A1 exam</button>
       </aside>
@@ -641,6 +672,242 @@ function renderPhrasebook() {
   renderShell(`<p class="kicker">Carry these</p><h1>Phrasebook</h1><p class="lead">Memorize these before you travel. Tap ▶ and copy the melody of the sentence.</p>${groups}`);
 }
 
+// Splitting on a capture group keeps the punctuation in place, so only words become tappable.
+const STORY_TOKENS = /([^\p{L}\p{M}\u2019'-]+)/u;
+
+function storyWords(text) {
+  return text.split(STORY_TOKENS).filter((part, i) => i % 2 === 0 && part);
+}
+
+// A chapter is a list of paragraphs, each a list of sentences. A bare list of
+// sentences is accepted too, and reads as one paragraph.
+function pageParagraphs(page) {
+  return page.paragraphs ? page.paragraphs.map((par) => par.lines || par) : [page.lines || []];
+}
+
+function storyWordCount(story) {
+  return story.pages.reduce((n, page) => n + pageParagraphs(page).reduce(
+    (m, par) => m + par.reduce((k, line) => k + storyWords(line.es).length, 0),
+    0
+  ), 0);
+}
+
+// Accent-blind fallback, tried last: «el» and «él» must not collapse into one entry.
+let glossLoose = null;
+
+function looseGloss() {
+  if (glossLoose) return glossLoose;
+  glossLoose = new Map();
+  for (const [key, value] of Object.entries(GLOSS)) {
+    const loose = norm(key);
+    if (!glossLoose.has(loose)) glossLoose.set(loose, value);
+  }
+  return glossLoose;
+}
+
+function glossFor(word, story) {
+  const key = word.toLowerCase();
+  if (story.gloss && key in story.gloss) return story.gloss[key];
+  if (key in GLOSS) return GLOSS[key];
+  return looseGloss().get(norm(key)) || null;
+}
+
+// Spans, not buttons: inline buttons break badly across lines, and one delegated
+// listener on the page beats several hundred listeners in a long story.
+function storyLineHtml(es, lineId) {
+  return es
+    .split(STORY_TOKENS)
+    .map((part, i) => {
+      if (i % 2 === 1 || !part) return escapeHtml(part);
+      return `<span class="w" data-w="${escapeAttr(part)}" data-line="${lineId}">${escapeHtml(part)}</span>`;
+    })
+    .join("");
+}
+
+function renderStories() {
+  const read = progress().stories || {};
+  const groups = STORY_LEVELS.map((lvl) => {
+    const stories = STORIES.filter((s) => s.level === lvl.level);
+    if (!stories.length) return "";
+    const cards = stories.map((s) => {
+      const furthest = storyFurthestPage(s.id);
+      const status = read[s.id]
+        ? "Read"
+        : furthest
+          ? `Chapter ${furthest + 1} of ${s.pages.length}`
+          : `${s.minutes} min`;
+      return `
+        <button class="card story-card" data-go="#/story/${s.id}${furthest ? `/${furthest + 1}` : ""}">
+          <div class="meta"><span>${s.pages.length} chapters · ${storyWordCount(s)} words</span><span>${status}</span></div>
+          <h3>${escapeHtml(s.title)}</h3>
+          <p>${escapeHtml(s.summary)}</p>
+        </button>`;
+    }).join("");
+    return `
+      <div class="section">
+        <h2>Level ${lvl.level} · ${escapeHtml(lvl.title)}</h2>
+        <p class="en">After unit ${lvl.after}. ${escapeHtml(lvl.note)}</p>
+        <div class="grid">${cards}</div>
+      </div>`;
+  }).join("");
+
+  renderShell(`
+    <p class="kicker">Reading</p>
+    <h1>Cuentos</h1>
+    <p class="lead">Little books that use only the grammar you have already met. Read one chapter at a time, and tap any word to see what it means and how the whole sentence reads.</p>
+    <div class="card section"><h3>${storiesRead()} / ${STORIES.length}</h3><p>Books finished</p></div>
+    ${groups}
+    <p class="note">Nothing is locked. The level only tells you which units a book leans on, so a level 3 book will feel easier once unit 8 is behind you. A book you have started reopens at the chapter you stopped in.</p>
+  `);
+}
+
+// Filled during render so the word sheet can show the sentence a word came from.
+let storyLines = new Map();
+
+function renderStory(story, pageNumber) {
+  const total = story.pages.length;
+  const furthest = storyFurthestPage(story.id);
+  // No chapter in the URL means "carry on where I stopped".
+  const wanted = Number.isFinite(pageNumber) ? pageNumber : furthest + 1;
+  const n = Math.min(Math.max(wanted, 1), total);
+  const page = story.pages[n - 1];
+  const last = n === total;
+  markStoryPage(story.id, n - 1);
+  storyLines = new Map();
+
+  const index = story.pages.map((pg, i) => {
+    const active = i + 1 === n ? " active" : "";
+    const done = i < furthest ? " done" : "";
+    return `<button class="chip${active}${done}" data-go="#/story/${story.id}/${i + 1}"
+      title="${escapeAttr(pg.title)}" aria-label="Chapter ${i + 1}: ${escapeAttr(pg.title)}">${i + 1}</button>`;
+  }).join("");
+
+  const paragraphs = pageParagraphs(page).map((par, pi) => {
+    const es = par.map((line, i) => {
+      const id = `${pi}-${i}`;
+      storyLines.set(id, line);
+      return `<span class="story-sent">${storyLineHtml(line.es, id)}</span>`;
+    }).join(" ");
+    const en = par.map((line) => escapeHtml(line.en)).join(" ");
+    return `<p class="story-par">${es}</p><p class="story-en">${en}</p>`;
+  }).join("");
+
+  const pageText = pageParagraphs(page).flatMap((par) => par.map((line) => line.es)).join(" ");
+
+  // The hint belongs on the first chapter only, not on all eight.
+  const hint = n === 1
+    ? `<p class="note">Read a chapter out loud before you tap anything. Guessing from context is the skill you are building — the meanings are there for when guessing fails.</p>`
+    : "";
+
+  const ending = last ? `
+    <div class="section">
+      <h3>Words worth keeping</h3>
+      <div class="vocab">${story.vocab.map((it) => `
+        <div class="vocab-row">
+          ${speakBtn(it.es)}
+          <div class="es">${escapeHtml(it.es)}</div>
+          <div class="en">${escapeHtml(it.en)}</div>
+        </div>`).join("")}</div>
+    </div>
+    <h2>Did you follow it?</h2>
+    <p class="lead">Seven questions about the whole book, in Spanish.</p>
+    ${story.questions.map((ex, i) => renderExercise(ex, i, "s")).join("")}
+    <div id="story-score"></div>` : "";
+
+  renderShell(`
+    <div class="story-view">
+      <p class="kicker">${escapeHtml(story.title)} · Capítulo ${n} de ${total}</p>
+      <h1>${escapeHtml(page.title)}</h1>
+      <div class="bar story-bar"><span style="width:${Math.round((n / total) * 100)}%"></span></div>
+      <div class="lesson-nav">${index}</div>
+      <div class="actions">
+        ${speakBtn(pageText)}
+        <button class="btn secondary" data-toggle-en type="button">${state.storyShowEn ? "Hide English" : "Show English"}</button>
+      </div>
+      ${hint}
+      <div class="story-body${state.storyShowEn ? " show-en" : ""}">
+        <span class="story-scene" aria-hidden="true">${escapeHtml(page.scene || "")}</span>
+        ${paragraphs}
+      </div>
+      ${ending}
+      <div class="footer-nav">
+        <button class="btn secondary" data-go="${n > 1 ? `#/story/${story.id}/${n - 1}` : "#/stories"}">${n > 1 ? "Previous chapter" : "All books"}</button>
+        ${last
+          ? `<button class="btn" data-mark-story type="button">Finish the book</button>`
+          : `<button class="btn" data-go="#/story/${story.id}/${n + 1}">Next chapter</button>`}
+      </div>
+    </div>
+    <div class="sheet" id="word-sheet" hidden></div>
+  `);
+
+  const body = document.querySelector(".story-body");
+  body.addEventListener("click", (e) => {
+    const word = e.target.closest(".w");
+    if (!word) return;
+    document.querySelectorAll(".w.active").forEach((el) => el.classList.remove("active"));
+    word.classList.add("active");
+    openWordSheet(story, word.dataset.w, word.dataset.line);
+  });
+
+  const toggle = document.querySelector("[data-toggle-en]");
+  toggle.addEventListener("click", () => {
+    state.storyShowEn = !state.storyShowEn;
+    body.classList.toggle("show-en", state.storyShowEn);
+    toggle.textContent = state.storyShowEn ? "Hide English" : "Show English";
+  });
+
+  if (!last) return;
+
+  document.querySelector("[data-mark-story]").addEventListener("click", () => {
+    markStory(story.id);
+    go("#/stories");
+  });
+
+  bindExercises(story.questions, "s", (score, total2) => {
+    markStory(story.id);
+    document.getElementById("story-score").innerHTML = `<div class="card section"><p class="score">${score} / ${total2}</p><p>${
+      score === total2 ? "You read it, not guessed it. Pick the next book." : "Reread the chapters you are unsure about with English on, then retry."
+    }</p></div>`;
+  });
+}
+
+function openWordSheet(story, word, lineId) {
+  const line = storyLines.get(lineId);
+  const meaning = glossFor(word, story);
+  const sheet = document.getElementById("word-sheet");
+  if (!sheet || !line) return;
+
+  sheet.innerHTML = `
+    <div class="sheet-row">
+      <div>
+        <p class="sheet-word">${escapeHtml(word)}</p>
+        <p class="sheet-meaning">${meaning ? escapeHtml(meaning) : "No meaning noted for this word yet."}</p>
+      </div>
+      ${speakBtn(word)}
+    </div>
+    <div class="sheet-line">
+      <div class="sheet-row">
+        <p class="es">${escapeHtml(line.es)}</p>
+        ${speakBtn(line.es)}
+      </div>
+      <p class="en">${escapeHtml(line.en)}</p>
+    </div>
+    <button class="btn secondary" data-close-sheet type="button">Close</button>
+  `;
+  sheet.hidden = false;
+  // These listeners die with the nodes on the next tap, so nothing accumulates.
+  sheet.querySelectorAll("[data-speak]").forEach((b) => {
+    b.addEventListener("click", () => speak(b.getAttribute("data-speak")));
+  });
+  sheet.querySelector("[data-close-sheet]").addEventListener("click", closeWordSheet);
+}
+
+function closeWordSheet() {
+  const sheet = document.getElementById("word-sheet");
+  if (sheet) sheet.hidden = true;
+  document.querySelectorAll(".w.active").forEach((n) => n.classList.remove("active"));
+}
+
 function renderVerbs() {
   const v = COURSE.verbs[state.verb.i % COURSE.verbs.length];
   const person = state.verb.person;
@@ -694,6 +961,12 @@ function nextVerb() {
 function renderRoute(route) {
   if (route.view === "how") return renderHow();
   if (route.view === "phrasebook") return renderPhrasebook();
+  if (route.view === "stories") return renderStories();
+  if (route.view === "story") {
+    const story = STORIES.find((s) => s.id === route.storyId);
+    if (!story) return renderStories();
+    return renderStory(story, route.storyPage);
+  }
   if (route.view === "verbs") return renderVerbs();
   if (route.view === "exam") return renderExam();
   if (route.unitId) {
@@ -724,9 +997,10 @@ function render({ scrollToTop = false } = {}) {
   state.view = route.view;
   state.unitId = route.unitId || null;
   state.lessonId = route.lessonId || null;
+  state.storyId = route.storyId || null;
   state.menuOpen = state.menuOpen && window.innerWidth <= 860;
 
-  const routeKey = [route.view, route.unitId, route.lessonId].join("|");
+  const routeKey = [route.view, route.unitId, route.lessonId, route.storyId, route.storyPage].join("|");
   const routeChanged = routeKey !== lastRouteKey;
   lastRouteKey = routeKey;
 
@@ -750,7 +1024,13 @@ window.addEventListener("resize", () => {
   markScrollableTables();
 });
 window.addEventListener("keydown", (e) => {
-  if (e.key === "Escape" && state.menuOpen) {
+  if (e.key !== "Escape") return;
+  const sheet = document.getElementById("word-sheet");
+  if (sheet && !sheet.hidden) {
+    closeWordSheet();
+    return;
+  }
+  if (state.menuOpen) {
     state.menuOpen = false;
     render();
   }

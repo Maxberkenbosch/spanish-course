@@ -44,7 +44,8 @@ A1 is about **50–70 hours** of real work.
 2. Play every ▶ button and repeat out loud.
 3. Finish the practice set, then the unit quiz (75% to pass).
 4. Use **Verb trainer** for 5 minutes a day.
-5. Take the **Final A1 exam**. Then do the speaking and writing prompts without a translator.
+5. Read a chapter in **Reading** whenever a unit is done.
+6. Take the **Final A1 exam**. Then do the speaking and writing prompts without a translator.
 
 Daily plan that works: **45 minutes a day for about 10 weeks**, or 90 minutes a day for 5 weeks.
 
@@ -55,6 +56,16 @@ Daily plan that works: **45 minutes a day for about 10 weeks**, or 90 minutes a 
 **Quiz** is the checkpoint. Every item puts you in a situation ("you step on someone's foot in the metro"), asks you to spot a wrong sentence, or asks for a whole sentence in Spanish. Nothing is copied from the practice set, so a good score means you can actually use the unit rather than remember the drill.
 
 If you edit the exercises, run `node tools/check-course.mjs`. It fails if practice, quiz and the exam start repeating each other, or if an item is broken (answer index out of range, scrambled sentence that cannot be rebuilt, and so on).
+
+### Reading builds the third skill
+
+**Reading** holds little books that use only grammar the units have already taught. Each one is labelled with the unit it leans on, but nothing is locked — a level 3 book simply feels easier once unit 8 is behind you.
+
+A book is read one chapter at a time: numbered chapters you can jump between, a progress bar, and a book that reopens at the chapter you stopped in. *El gato de Ana* is 8 chapters and about 700 words.
+
+Read a chapter out loud first and guess from context; that guessing is the skill. When a word beats you, tap it: you get its meaning, the verb's infinitive if it is a verb form, and the sentence it came from with its translation and pronunciation. **Show English** puts a translation under each Spanish paragraph for a second pass. The last chapter ends with comprehension questions in Spanish, which tell you whether you read it or skimmed it.
+
+Books live in `js/stories.js`, as chapters of paragraphs of sentences. Words are explained from one shared dictionary, so each new book only needs the words that have never appeared before. After editing, run `node tools/check-stories.mjs`: it lists every word that would leave the reader with nothing when tapped, catches typos in a book's own word list, and checks the questions.
 
 ## Course map
 
