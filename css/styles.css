@@ -68,7 +68,7 @@ a { color: var(--brick-dark); }
   display: block;
   text-decoration: none;
   color: inherit;
-  margin-bottom: 28px;
+  margin-bottom: 14px;
 }
 
 .brand small {
@@ -85,6 +85,34 @@ a { color: var(--brick-dark); }
   font-size: 28px;
   font-weight: 650;
 }
+
+.course-switch {
+  display: flex;
+  gap: 8px;
+  margin: 0 0 18px;
+}
+
+.course-switch button {
+  flex: 1;
+  border: 1px solid #5c4e42;
+  background: transparent;
+  color: #f4eadb;
+  border-radius: 999px;
+  padding: 8px 10px;
+  min-height: 40px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.course-switch button.active {
+  background: #c49a4a;
+  color: #2a221c;
+  border-color: #c49a4a;
+}
+
+.progress-gap { margin-top: 12px; }
 
 .progress-box {
   background: #3a3028;
@@ -270,6 +298,7 @@ h3 { font-size: 22px; }
 /* Hover effects only where a real pointer exists, so taps do not leave them stuck. */
 @media (hover: hover) {
   .nav-link:hover { background: #46392f; }
+  .course-switch button:hover { border-color: #c49a4a; }
   .btn:hover { background: var(--brick-dark); }
   .btn.secondary:hover { border-color: #c9a36a; }
   .unit-card:hover {

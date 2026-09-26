@@ -1,4 +1,4 @@
-const VERSION = "v3";
+const VERSION = "v4";
 const SHELL_CACHE = `camino-shell-${VERSION}`;
 const FONT_CACHE = `camino-fonts-${VERSION}`;
 const KEEP = [SHELL_CACHE, FONT_CACHE];
@@ -8,6 +8,7 @@ const SHELL = [
   "./index.html",
   "./css/styles.css",
   "./js/course.js",
+  "./js/course-a2.js",
   "./js/stories.js",
   "./js/app.js",
   "./manifest.webmanifest",

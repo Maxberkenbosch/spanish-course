@@ -1,7 +1,7 @@
 {
-  "name": "Camino A1 — Beginner Spanish",
-  "short_name": "Camino A1",
-  "description": "A complete CEFR A1 Spanish course you can work through offline: lessons, practice, unit quizzes, a verb trainer, and a final exam.",
+  "name": "Camino — Spanish A1 and A2",
+  "short_name": "Camino",
+  "description": "CEFR A1 and A2 Spanish in one app: lessons, practice, unit quizzes, a verb trainer, reading, and a final exam for each level.",
   "lang": "en",
   "dir": "ltr",
   "start_url": "./",
@@ -38,19 +38,19 @@
   ],
   "shortcuts": [
     {
-      "name": "Verb trainer",
+      "name": "A1 course",
+      "short_name": "A1",
+      "url": "./#/a1"
+    },
+    {
+      "name": "A2 course",
+      "short_name": "A2",
+      "url": "./#/a2"
+    },
+    {
+      "name": "A1 verb trainer",
       "short_name": "Verbs",
-      "url": "./#/verbs"
-    },
-    {
-      "name": "Phrasebook",
-      "short_name": "Phrases",
-      "url": "./#/phrasebook"
-    },
-    {
-      "name": "Final A1 exam",
-      "short_name": "Exam",
-      "url": "./#/exam"
+      "url": "./#/a1/verbs"
     }
   ]
 }

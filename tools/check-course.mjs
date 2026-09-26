@@ -6,8 +6,16 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
-const source = readFileSync(join(root, "js/course.js"), "utf8");
-const COURSE = new Function(`${source}; return COURSE;`)();
+
+function loadCourse(file, exportName) {
+  const source = readFileSync(join(root, file), "utf8");
+  return new Function(`${source}; return ${exportName};`)();
+}
+
+const courses = [
+  ["js/course.js", "COURSE"],
+  ["js/course-a2.js", "COURSE_A2"]
+];
 
 const norm = (value) =>
   String(value ?? "")
@@ -30,7 +38,16 @@ function target(ex) {
 const problems = [];
 const report = [];
 
-function checkShape(ex, where) {
+for (const [file, exportName] of courses) {
+  const COURSE = loadCourse(file, exportName);
+  report.push(`\n${file}`);
+  checkCourse(COURSE, problems, report);
+}
+
+function checkCourse(COURSE, problems, report) {
+  const seenGlobally = new Map();
+
+  function checkShape(ex, where) {
   const at = `${where} [${ex.type}]`;
   if (!ex.type) return problems.push(`${where}: missing type`);
   if (ex.type === "mc") {
@@ -66,11 +83,9 @@ function checkShape(ex, where) {
     // Two identical meanings would make the exercise unsolvable.
     if (new Set(english).size !== english.length) problems.push(`${at} repeats a meaning: ${ex.q}`);
   }
-}
+  }
 
-const seenGlobally = new Map();
-
-for (const unit of COURSE.units) {
+  for (const unit of COURSE.units) {
   const practice = unit.practice || [];
   const quiz = unit.quiz || [];
   practice.forEach((ex) => checkShape(ex, `u${unit.num} practice`));
@@ -104,17 +119,19 @@ for (const unit of COURSE.units) {
   report.push(`    quiz     ${String(quiz.length).padStart(2)} (${count(quiz)})`);
 }
 
-const exam = COURSE.exam || [];
-exam.forEach((ex) => checkShape(ex, "exam"));
-const examRepeats = exam.filter((ex) => seenGlobally.has(target(ex)));
-if (examRepeats.length) {
-  problems.push(`exam: ${examRepeats.length} item(s) repeat a unit exercise`);
-  examRepeats.forEach((ex) => problems.push(`   ${ex.q || ex.answer}`));
+  const exam = COURSE.exam || [];
+  exam.forEach((ex) => checkShape(ex, "exam"));
+  const examRepeats = exam.filter((ex) => seenGlobally.has(target(ex)));
+  if (examRepeats.length) {
+    problems.push(`exam: ${examRepeats.length} item(s) repeat a unit exercise`);
+    examRepeats.forEach((ex) => problems.push(`   ${ex.q || ex.answer}`));
+  }
+
+  report.push(`exam ${exam.length} items`);
+  report.push(`total ${COURSE.units.reduce((n, u) => n + u.practice.length + u.quiz.length, 0) + exam.length} exercises`);
 }
 
 console.log(report.join("\n"));
-console.log(`\nexam ${exam.length} items`);
-console.log(`total ${COURSE.units.reduce((n, u) => n + u.practice.length + u.quiz.length, 0) + exam.length} exercises`);
 
 if (problems.length) {
   console.error(`\n${problems.length} problem(s):`);

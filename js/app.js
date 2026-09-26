@@ -1,5 +1,32 @@
-const STORE_KEY = "camino-a1-progress-v1";
+const STORE_KEYS = {
+  a1: "camino-a1-progress-v1",
+  a2: "camino-a2-progress-v1"
+};
+const STORY_KEY = "camino-stories-v1";
+const COURSE_MEMORY = "camino-active-course";
 const PRONOUNS = ["yo", "tú", "él/usted", "nosotros", "vosotros", "ellos/ustedes"];
+
+let activeCourseId = "a1";
+
+function C() {
+  return activeCourseId === "a2" ? COURSE_A2 : COURSE;
+}
+
+function h(path) {
+  return path ? `#/${activeCourseId}/${path}` : `#/${activeCourseId}`;
+}
+
+function rememberCourse(id) {
+  try { sessionStorage.setItem(COURSE_MEMORY, id); } catch { /* private mode */ }
+}
+
+function rememberedCourse() {
+  try {
+    const id = sessionStorage.getItem(COURSE_MEMORY);
+    if (id === "a1" || id === "a2") return id;
+  } catch { /* private mode */ }
+  return "a1";
+}
 
 const state = {
   view: "home",
@@ -15,20 +42,24 @@ const state = {
   verb: { i: 0, person: 0, streak: 0 }
 };
 
+function storeKey() {
+  return STORE_KEYS[activeCourseId] || STORE_KEYS.a1;
+}
+
 function loadProgress() {
   try {
-    return JSON.parse(localStorage.getItem(STORE_KEY)) || defaultProgress();
+    return JSON.parse(localStorage.getItem(storeKey())) || defaultProgress();
   } catch {
     return defaultProgress();
   }
 }
 
 function defaultProgress() {
-  return { lessons: {}, practice: {}, quizzes: {}, stories: {}, storyPages: {}, exam: null };
+  return { lessons: {}, practice: {}, quizzes: {}, exam: null };
 }
 
 function saveProgress(p) {
-  localStorage.setItem(STORE_KEY, JSON.stringify(p));
+  localStorage.setItem(storeKey(), JSON.stringify(p));
 }
 
 function progress() {
@@ -53,29 +84,50 @@ function markQuiz(unitId, score, total) {
   saveProgress(p);
 }
 
-// Stories are extra reading, not an A1 requirement, so they stay out of courseStats().
+// Reading is shared by both courses, and it does not count toward courseStats().
+function loadStoryProgress() {
+  try {
+    const raw = localStorage.getItem(STORY_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch { /* migrate below */ }
+  let stories = {};
+  let storyPages = {};
+  try {
+    const a1 = JSON.parse(localStorage.getItem(STORE_KEYS.a1) || "null");
+    if (a1) {
+      stories = a1.stories || {};
+      storyPages = a1.storyPages || {};
+    }
+  } catch { /* ignore a broken A1 save */ }
+  const data = { stories, storyPages };
+  localStorage.setItem(STORY_KEY, JSON.stringify(data));
+  return data;
+}
+
+function saveStoryProgress(data) {
+  localStorage.setItem(STORY_KEY, JSON.stringify(data));
+}
+
 function markStory(storyId) {
-  const p = progress();
-  p.stories = p.stories || {};
-  p.stories[storyId] = true;
-  saveProgress(p);
+  const data = loadStoryProgress();
+  data.stories[storyId] = true;
+  saveStoryProgress(data);
 }
 
 function storiesRead() {
-  return Object.keys(progress().stories || {}).length;
+  return Object.keys(loadStoryProgress().stories || {}).length;
 }
 
 // Remembers the furthest chapter opened, so a book reopens where you stopped.
 function markStoryPage(storyId, index) {
-  const p = progress();
-  p.storyPages = p.storyPages || {};
-  if ((p.storyPages[storyId] || 0) >= index) return;
-  p.storyPages[storyId] = index;
-  saveProgress(p);
+  const data = loadStoryProgress();
+  if ((data.storyPages[storyId] || 0) >= index) return;
+  data.storyPages[storyId] = index;
+  saveStoryProgress(data);
 }
 
 function storyFurthestPage(storyId) {
-  return (progress().storyPages || {})[storyId] || 0;
+  return (loadStoryProgress().storyPages || {})[storyId] || 0;
 }
 
 function unitDone(unit) {
@@ -87,11 +139,11 @@ function unitDone(unit) {
 
 function courseStats() {
   const p = progress();
-  const lessonTotal = COURSE.units.reduce((n, u) => n + u.lessons.length, 0);
+  const lessonTotal = C().units.reduce((n, u) => n + u.lessons.length, 0);
   const lessonDone = Object.keys(p.lessons).length;
   const quizDone = Object.keys(p.quizzes).length;
   const examDone = p.exam ? 1 : 0;
-  const total = lessonTotal + COURSE.units.length + COURSE.units.length + 1;
+  const total = lessonTotal + C().units.length + C().units.length + 1;
   const done = lessonDone + Object.keys(p.practice).length + quizDone + examDone;
   return { pct: Math.round((done / total) * 100), lessonDone, lessonTotal, quizDone };
 }
@@ -147,7 +199,15 @@ function shuffledApart(count) {
 }
 
 function unitById(id) {
-  return COURSE.units.find((u) => u.id === id);
+  return C().units.find((u) => u.id === id);
+}
+
+function statsFor(id) {
+  const prev = activeCourseId;
+  activeCourseId = id;
+  const stats = courseStats();
+  activeCourseId = prev;
+  return stats;
 }
 
 function go(hash) {
@@ -157,19 +217,29 @@ function go(hash) {
 function parseHash() {
   const raw = (location.hash || "#/").replace(/^#/, "");
   const parts = raw.split("/").filter(Boolean);
-  if (!parts.length) return { view: "home" };
+  if (!parts.length) return { view: "catalog" };
+
+  let courseId = null;
+  if (parts[0] === "a1" || parts[0] === "a2") courseId = parts.shift();
+  if (!parts.length) return { view: "home", courseId };
+
+  if (parts[0] === "story" && parts[1]) {
+    return { view: "story", storyId: parts[1], storyPage: parts[2] ? Number(parts[2]) : null, courseId };
+  }
+  if (parts[0] === "stories") return { view: "stories", courseId };
+
+  // Older A1 links (#/unit/u1, #/exam) keep working.
+  if (!courseId) courseId = "a1";
+
   if (parts[0] === "unit" && parts[1]) {
     const unitId = parts[1];
-    if (parts[2] === "practice") return { view: "practice", unitId };
-    if (parts[2] === "quiz") return { view: "quiz", unitId };
-    if (parts[2] === "lesson" && parts[3]) return { view: "lesson", unitId, lessonId: parts[3] };
-    return { view: "unit", unitId };
+    if (parts[2] === "practice") return { view: "practice", unitId, courseId };
+    if (parts[2] === "quiz") return { view: "quiz", unitId, courseId };
+    if (parts[2] === "lesson" && parts[3]) return { view: "lesson", unitId, lessonId: parts[3], courseId };
+    return { view: "unit", unitId, courseId };
   }
-  if (parts[0] === "story" && parts[1]) {
-    return { view: "story", storyId: parts[1], storyPage: parts[2] ? Number(parts[2]) : null };
-  }
-  if (["exam", "phrasebook", "verbs", "how", "stories"].includes(parts[0])) return { view: parts[0] };
-  return { view: "home" };
+  if (["exam", "phrasebook", "verbs", "how"].includes(parts[0])) return { view: parts[0], courseId };
+  return { view: "home", courseId };
 }
 
 function el(html) {
@@ -191,39 +261,70 @@ function escapeHtml(s) {
 }
 
 function renderShell(mainHtml) {
-  const stats = courseStats();
-  const navUnits = COURSE.units.map((u) => {
+  const catalog = state.view === "catalog";
+  const course = C();
+  const ui = course.ui;
+  const stats = catalog ? null : courseStats();
+  const a1Stats = catalog ? statsFor("a1") : null;
+  const a2Stats = catalog ? statsFor("a2") : null;
+  const navUnits = catalog ? "" : course.units.map((u) => {
     const active = state.unitId === u.id ? " active" : "";
     const done = unitDone(u) ? " done" : "";
-    return `<button class="nav-link${active}${done}" data-go="#/unit/${u.id}"><span class="num">${u.num}</span>${escapeHtml(u.title)}</button>`;
+    return `<button class="nav-link${active}${done}" data-go="${h(`unit/${u.id}`)}"><span class="num">${u.num}</span>${escapeHtml(u.title)}</button>`;
   }).join("");
+
+  const switcher = `
+    <div class="course-switch">
+      <button type="button" data-go="#/a1" class="${!catalog && activeCourseId === "a1" ? "active" : ""}">A1</button>
+      <button type="button" data-go="#/a2" class="${!catalog && activeCourseId === "a2" ? "active" : ""}">A2</button>
+    </div>`;
+
+  const brand = catalog
+    ? `<a class="brand" href="#/" data-go="#/"><small>Spanish</small><strong>Camino</strong></a>`
+    : `<a class="brand" href="${h("")}" data-go="${h("")}"><small>CEFR ${escapeHtml(course.level)}</small><strong>${escapeHtml(course.title)}</strong></a>`;
+
+  const progressBox = catalog
+    ? `<div class="progress-box">
+        <p>A1 · ${a1Stats.pct}%</p>
+        <div class="bar"><span style="width:${a1Stats.pct}%"></span></div>
+        <p class="progress-gap">A2 · ${a2Stats.pct}%</p>
+        <div class="bar"><span style="width:${a2Stats.pct}%"></span></div>
+      </div>`
+    : `<div class="progress-box">
+        <p>Course progress · ${stats.pct}%</p>
+        <div class="bar"><span style="width:${stats.pct}%"></span></div>
+      </div>`;
+
+  const nav = catalog
+    ? `<button class="nav-link active" data-go="#/">Courses</button>
+       <button class="nav-link" data-go="#/a1">Camino A1</button>
+       <button class="nav-link" data-go="#/a2">Camino A2</button>
+       <div class="nav-label">Tools</div>
+       <button class="nav-link${state.view === "stories" || state.view === "story" ? " active" : ""}" data-go="${h("stories")}">Reading</button>`
+    : `<button class="nav-link" data-go="#/">All courses</button>
+       <button class="nav-link${state.view === "home" ? " active" : ""}" data-go="${h("")}">Home</button>
+       <button class="nav-link${state.view === "how" ? " active" : ""}" data-go="${h("how")}">${escapeHtml(ui.navHow)}</button>
+       <div class="nav-label">Units</div>
+       ${navUnits}
+       <div class="nav-label">Tools</div>
+       <button class="nav-link${state.view === "phrasebook" ? " active" : ""}" data-go="${h("phrasebook")}">Phrasebook</button>
+       <button class="nav-link${state.view === "stories" || state.view === "story" ? " active" : ""}" data-go="${h("stories")}">Reading</button>
+       <button class="nav-link${state.view === "verbs" ? " active" : ""}" data-go="${h("verbs")}">Verb trainer</button>
+       <button class="nav-link${state.view === "exam" ? " active" : ""}" data-go="${h("exam")}">${escapeHtml(ui.navExam)}</button>`;
 
   document.getElementById("app").innerHTML = `
     <div class="overlay${state.menuOpen ? " show" : ""}" data-close-menu></div>
     <div class="app">
       <aside class="sidebar${state.menuOpen ? " open" : ""}" id="sidebar">
-        <a class="brand" href="#/" data-go="#/">
-          <small>CEFR beginner</small>
-          <strong>Camino A1</strong>
-        </a>
-        <div class="progress-box">
-          <p>Course progress · ${stats.pct}%</p>
-          <div class="bar"><span style="width:${stats.pct}%"></span></div>
-        </div>
-        <button class="nav-link${state.view === "home" ? " active" : ""}" data-go="#/">Home</button>
-        <button class="nav-link${state.view === "how" ? " active" : ""}" data-go="#/how">How to reach A1</button>
-        <div class="nav-label">Units</div>
-        ${navUnits}
-        <div class="nav-label">Tools</div>
-        <button class="nav-link${state.view === "phrasebook" ? " active" : ""}" data-go="#/phrasebook">Phrasebook</button>
-        <button class="nav-link${state.view === "stories" || state.view === "story" ? " active" : ""}" data-go="#/stories">Reading</button>
-        <button class="nav-link${state.view === "verbs" ? " active" : ""}" data-go="#/verbs">Verb trainer</button>
-        <button class="nav-link${state.view === "exam" ? " active" : ""}" data-go="#/exam">Final A1 exam</button>
+        ${brand}
+        ${switcher}
+        ${progressBox}
+        ${nav}
       </aside>
       <main class="main">
         <div class="topbar">
           <button class="menu-btn" data-toggle-menu type="button" aria-controls="sidebar" aria-expanded="${state.menuOpen}">Menu</button>
-          <span class="topbar-progress">${stats.pct}% done</span>
+          <span class="topbar-progress">${catalog ? "A1 and A2" : `${stats.pct}% done`}</span>
         </div>
         ${mainHtml}
       </main>
@@ -260,12 +361,37 @@ function bindGlobal() {
   });
 }
 
+function renderCatalog() {
+  const cards = ["a1", "a2"].map((id) => {
+    const prev = activeCourseId;
+    activeCourseId = id;
+    const course = C();
+    const stats = courseStats();
+    activeCourseId = prev;
+    return `
+      <button class="card unit-card" data-go="#/${id}">
+        <div class="meta"><span>CEFR ${escapeHtml(course.level)}</span><span>${stats.pct}%</span></div>
+        <h3>${escapeHtml(course.title)}</h3>
+        <p>${escapeHtml(course.summary)}</p>
+      </button>`;
+  }).join("");
+
+  renderShell(`
+    <p class="kicker">Two levels, one app</p>
+    <h1>Camino</h1>
+    <p class="lead">A1 gets you through everyday Spanish. A2 is the next course: the past, pronouns, commands, comparisons, and plans. Progress for each level stays on this device.</p>
+    <div class="grid">${cards}</div>
+  `);
+}
+
 function renderHome() {
+  const course = C();
+  const ui = course.ui;
   const stats = courseStats();
-  const cards = COURSE.units.map((u) => {
+  const cards = course.units.map((u) => {
     const done = unitDone(u);
     return `
-      <button class="card unit-card" data-go="#/unit/${u.id}">
+      <button class="card unit-card" data-go="${h(`unit/${u.id}`)}">
         <div class="meta"><span>Unit ${u.num}</span><span>${done ? "Passed" : u.hours + " h"}</span></div>
         <h3>${escapeHtml(u.title)}</h3>
         <p>${escapeHtml(u.subtitle)}</p>
@@ -274,18 +400,18 @@ function renderHome() {
   }).join("");
 
   renderShell(`
-    <p class="kicker">Self-paced Spanish</p>
-    <h1>From zero to A1.</h1>
-    <p class="lead">Finish this course and you will be able to introduce yourself, handle shops, food, directions, and simple plans — the official CEFR A1 level. About ${COURSE.hours} hours if you speak out loud and do every exercise.</p>
+    <p class="kicker">${escapeHtml(ui.homeKicker)}</p>
+    <h1>${escapeHtml(ui.homeTitle)}</h1>
+    <p class="lead">${escapeHtml(ui.homeLead)}</p>
     <div class="grid">
       <div class="card"><h3>${stats.lessonDone} / ${stats.lessonTotal}</h3><p>Lessons opened and marked done</p></div>
-      <div class="card"><h3>${stats.quizDone} / 10</h3><p>Unit quizzes completed</p></div>
+      <div class="card"><h3>${stats.quizDone} / ${course.units.length}</h3><p>Unit quizzes completed</p></div>
       <div class="card"><h3>${stats.pct}%</h3><p>Whole-course progress</p></div>
     </div>
     <div class="actions">
-      <button class="btn" data-go="#/unit/u1">Start unit 1</button>
-      <button class="btn secondary" data-go="#/how">Study plan</button>
-      <button class="btn olive" data-go="#/exam">Final exam</button>
+      <button class="btn" data-go="${h(`unit/${course.units[0].id}`)}">Start unit 1</button>
+      <button class="btn secondary" data-go="${h("how")}">Study plan</button>
+      <button class="btn olive" data-go="${h("exam")}">Final exam</button>
     </div>
     <h2 style="margin-top:40px">The path</h2>
     <div class="grid">${cards}</div>
@@ -293,40 +419,25 @@ function renderHome() {
 }
 
 function renderHow() {
+  const ui = C().ui;
   renderShell(`
-    <p class="kicker">Method</p>
-    <h1>How to actually reach A1</h1>
-    <p class="lead">A1 is not “I watched some videos.” It means you can do the jobs below, slowly, with mistakes, when the other person helps you.</p>
+    <p class="kicker">${escapeHtml(ui.howKicker)}</p>
+    <h1>${escapeHtml(ui.howTitle)}</h1>
+    <p class="lead">${escapeHtml(ui.howLead)}</p>
     <div class="card section">
-      <h3>What A1 speakers can do</h3>
-      <ul class="can-do">
-        <li>Introduce themselves and ask basic personal questions</li>
-        <li>Talk about family, home, work or studies, and daily routine</li>
-        <li>Order food, shop, and ask where something is</li>
-        <li>Understand set phrases if people speak slowly and clearly</li>
-        <li>Write a few short sentences about their life</li>
-      </ul>
+      <h3>${escapeHtml(ui.howCanDoTitle)}</h3>
+      <ul class="can-do">${ui.howCanDo.map((c) => `<li>${escapeHtml(c)}</li>`).join("")}</ul>
     </div>
     <div class="card section">
-      <h3>A realistic timetable</h3>
-      <p>Instituto Cervantes-style A1 is roughly 60–90 classroom hours. Alone, plan <strong>50–70 focused hours</strong>.</p>
-      <ul class="can-do">
-        <li><strong>45 minutes a day for 10 weeks</strong> — the steady path</li>
-        <li><strong>90 minutes a day for 5 weeks</strong> — faster</li>
-        <li>One unit every 4–6 days: lesson → speak the dialogues → practice → quiz (75% to pass)</li>
-      </ul>
+      <h3>${escapeHtml(ui.howTimeTitle)}</h3>
+      <p>${ui.howTimeHtml}</p>
+      <ul class="can-do">${ui.howTimeItems.map((c) => `<li>${c}</li>`).join("")}</ul>
     </div>
     <div class="card section">
-      <h3>Rules that make this work</h3>
-      <ul class="can-do">
-        <li>Press ▶ and repeat every new word out loud. Silent study does not become speaking.</li>
-        <li>Write answers yourself. Do not peek, then immediately retry the ones you missed.</li>
-        <li>After each unit, record yourself doing the “can-do” list on the unit page.</li>
-        <li>Pass all 10 quizzes and the final exam at 75% or higher.</li>
-        <li>Then do the speaking and writing prompts without notes. That is A1 in real life.</li>
-      </ul>
+      <h3>${escapeHtml(ui.howRulesTitle)}</h3>
+      <ul class="can-do">${ui.howRules.map((c) => `<li>${escapeHtml(c)}</li>`).join("")}</ul>
     </div>
-    <p class="note">This course uses international Spanish: <em>tú</em> and <em>ustedes</em>. <em>Vosotros</em> appears in tables because you will see it in Spain. Accents are taught; answers accept them with or without marks.</p>
+    <p class="note">${ui.howNote}</p>
   `);
 }
 
@@ -334,7 +445,7 @@ function renderUnit(unit) {
   const p = progress();
   const chips = unit.lessons.map((l, i) => {
     const done = p.lessons[`${unit.id}:${l.id}`];
-    return `<button class="chip${done ? " done" : ""}" data-go="#/unit/${unit.id}/lesson/${l.id}">${i + 1}. ${escapeHtml(l.title)}</button>`;
+    return `<button class="chip${done ? " done" : ""}" data-go="${h(`unit/${unit.id}/lesson/${l.id}`)}">${i + 1}. ${escapeHtml(l.title)}</button>`;
   }).join("");
   const quiz = p.quizzes[unit.id];
   const prac = p.practice[unit.id];
@@ -349,9 +460,9 @@ function renderUnit(unit) {
     </div>
     <div class="lesson-nav">${chips}</div>
     <div class="actions">
-      <button class="btn" data-go="#/unit/${unit.id}/lesson/${unit.lessons[0].id}">Open first lesson</button>
-      <button class="btn secondary" data-go="#/unit/${unit.id}/practice">Practice${prac ? ` · ${prac.score}/${prac.total}` : ""}</button>
-      <button class="btn olive" data-go="#/unit/${unit.id}/quiz">Unit quiz${quiz ? ` · ${quiz.score}/${quiz.total}` : ""}</button>
+      <button class="btn" data-go="${h(`unit/${unit.id}/lesson/${unit.lessons[0].id}`)}">Open first lesson</button>
+      <button class="btn secondary" data-go="${h(`unit/${unit.id}/practice`)}">Practice${prac ? ` · ${prac.score}/${prac.total}` : ""}</button>
+      <button class="btn olive" data-go="${h(`unit/${unit.id}/quiz`)}">Unit quiz${quiz ? ` · ${quiz.score}/${quiz.total}` : ""}</button>
     </div>
   `);
 }
@@ -397,14 +508,14 @@ function renderLesson(unit, lesson) {
     <h1>${escapeHtml(lesson.title)}</h1>
     ${body}
     <div class="footer-nav">
-      <button class="btn secondary" data-go="${prev ? `#/unit/${unit.id}/lesson/${prev.id}` : `#/unit/${unit.id}`}">${prev ? "Previous" : "Unit overview"}</button>
+      <button class="btn secondary" data-go="${prev ? h(`unit/${unit.id}/lesson/${prev.id}`) : h(`unit/${unit.id}`)}">${prev ? "Previous" : "Unit overview"}</button>
       <button class="btn" data-mark-lesson>Mark done & continue</button>
     </div>
   `);
   document.querySelector("[data-mark-lesson]").addEventListener("click", () => {
     markLesson(unit.id, lesson.id);
-    if (next) go(`#/unit/${unit.id}/lesson/${next.id}`);
-    else go(`#/unit/${unit.id}/practice`);
+    if (next) go(h(`unit/${unit.id}/lesson/${next.id}`));
+    else go(h(`unit/${unit.id}/practice`));
   });
 }
 
@@ -590,8 +701,8 @@ function renderPractice(unit) {
     ${items}
     <div id="practice-score"></div>
     <div class="footer-nav">
-      <button class="btn secondary" data-go="#/unit/${unit.id}">Back to unit</button>
-      <button class="btn" data-go="#/unit/${unit.id}/quiz">Unit quiz</button>
+      <button class="btn secondary" data-go="${h(`unit/${unit.id}`)}">Back to unit</button>
+      <button class="btn" data-go="${h(`unit/${unit.id}/quiz`)}">Unit quiz</button>
     </div>
   `);
   bindExercises(unit.practice, "p", (score, total) => {
@@ -609,7 +720,7 @@ function renderQuiz(unit) {
     ${items}
     <div id="quiz-score"></div>
     <div class="footer-nav">
-      <button class="btn secondary" data-go="#/unit/${unit.id}">Back to unit</button>
+      <button class="btn secondary" data-go="${h(`unit/${unit.id}`)}">Back to unit</button>
     </div>
   `);
   bindExercises(unit.quiz, "q", (score, total) => {
@@ -620,16 +731,18 @@ function renderQuiz(unit) {
 }
 
 function renderExam() {
+  const course = C();
+  const ui = course.ui;
   const p = progress();
-  const items = COURSE.exam.map((ex, i) => renderExercise(ex, i, "e")).join("");
-  const speak = COURSE.speaking.map((s) => `<li>${escapeHtml(s)}</li>`).join("");
-  const write = COURSE.writing.map((s) => `<li>${escapeHtml(s)}</li>`).join("");
+  const items = course.exam.map((ex, i) => renderExercise(ex, i, "e")).join("");
+  const speak = course.speaking.map((s) => `<li>${escapeHtml(s)}</li>`).join("");
+  const write = course.writing.map((s) => `<li>${escapeHtml(s)}</li>`).join("");
   const prev = p.exam ? `<p class="note">Last score: ${p.exam.score} / ${p.exam.total} (${Math.round(p.exam.score / p.exam.total * 100)}%)</p>` : "";
 
   renderShell(`
-    <p class="kicker">DELE-style checkpoint</p>
-    <h1>Final A1 exam</h1>
-    <p class="lead">40 scored items covering the whole course. 75% is a pass — the level you wanted. Then do the speaking and writing tasks out loud / on paper. Those are not auto-scored on purpose.</p>
+    <p class="kicker">${escapeHtml(ui.examKicker)}</p>
+    <h1>${escapeHtml(ui.examTitle)}</h1>
+    <p class="lead">${escapeHtml(ui.examLead.replace("{n}", String(course.exam.length)))}</p>
     ${prev}
     ${items}
     <div id="exam-score"></div>
@@ -642,7 +755,7 @@ function renderExam() {
       <ul class="can-do">${write}</ul>
     </div>
   `);
-  bindExercises(COURSE.exam, "e", (score, total) => {
+  bindExercises(course.exam, "e", (score, total) => {
     const pr = progress();
     pr.exam = { score, total, at: Date.now() };
     saveProgress(pr);
@@ -650,17 +763,16 @@ function renderExam() {
     const pass = pct >= 75;
     document.getElementById("exam-score").innerHTML = `
       <div class="card section">
-        <p class="kicker">${pass ? "A1 reached" : "Not yet"}</p>
+        <p class="kicker">${escapeHtml(pass ? ui.examPassKicker : ui.examFailKicker)}</p>
         <p class="score">${score} / ${total}</p>
-        <p>${pass
-          ? "That is A1 on the grammar and vocabulary this course teaches. Finish the speaking and writing prompts to make it real."
-          : "Below 75%. Revisit the weakest units, then retake. A1 is close — do not skip the missed items."}</p>
+        <p>${escapeHtml(pass ? ui.examPass : ui.examFail)}</p>
       </div>`;
   });
 }
 
 function renderPhrasebook() {
-  const groups = COURSE.phrasebook.map((g) => {
+  const ui = C().ui;
+  const groups = C().phrasebook.map((g) => {
     const rows = g.items.map((it) => `
       <div class="vocab-row">
         ${speakBtn(it.es)}
@@ -669,7 +781,7 @@ function renderPhrasebook() {
       </div>`).join("");
     return `<div class="section"><h2>${escapeHtml(g.group)}</h2><div class="vocab">${rows}</div></div>`;
   }).join("");
-  renderShell(`<p class="kicker">Carry these</p><h1>Phrasebook</h1><p class="lead">Memorize these before you travel. Tap ▶ and copy the melody of the sentence.</p>${groups}`);
+  renderShell(`<p class="kicker">${escapeHtml(ui.phraseKicker)}</p><h1>Phrasebook</h1><p class="lead">${escapeHtml(ui.phraseLead)}</p>${groups}`);
 }
 
 // Splitting on a capture group keeps the punctuation in place, so only words become tappable.
@@ -725,7 +837,7 @@ function storyLineHtml(es, lineId) {
 }
 
 function renderStories() {
-  const read = progress().stories || {};
+  const read = loadStoryProgress().stories || {};
   const groups = STORY_LEVELS.map((lvl) => {
     const stories = STORIES.filter((s) => s.level === lvl.level);
     if (!stories.length) return "";
@@ -737,7 +849,7 @@ function renderStories() {
           ? `Chapter ${furthest + 1} of ${s.pages.length}`
           : `${s.minutes} min`;
       return `
-        <button class="card story-card" data-go="#/story/${s.id}${furthest ? `/${furthest + 1}` : ""}">
+        <button class="card story-card" data-go="${h(`story/${s.id}${furthest ? `/${furthest + 1}` : ""}`)}">
           <div class="meta"><span>${s.pages.length} chapters · ${storyWordCount(s)} words</span><span>${status}</span></div>
           <h3>${escapeHtml(s.title)}</h3>
           <p>${escapeHtml(s.summary)}</p>
@@ -746,7 +858,7 @@ function renderStories() {
     return `
       <div class="section">
         <h2>Level ${lvl.level} · ${escapeHtml(lvl.title)}</h2>
-        <p class="en">After unit ${lvl.after}. ${escapeHtml(lvl.note)}</p>
+        <p class="en">${activeCourseId === "a2" ? `Uses grammar from A1 unit ${lvl.after}.` : `After unit ${lvl.after}.`} ${escapeHtml(lvl.note)}</p>
         <div class="grid">${cards}</div>
       </div>`;
   }).join("");
@@ -757,7 +869,9 @@ function renderStories() {
     <p class="lead">Little books that use only the grammar you have already met. Read one chapter at a time, and tap any word to see what it means and how the whole sentence reads.</p>
     <div class="card section"><h3>${storiesRead()} / ${STORIES.length}</h3><p>Books finished</p></div>
     ${groups}
-    <p class="note">Nothing is locked. The level only tells you which units a book leans on, so a level 3 book will feel easier once unit 8 is behind you. A book you have started reopens at the chapter you stopped in.</p>
+    <p class="note">${activeCourseId === "a2"
+      ? "These books were written for the A1 course, so the grammar is already familiar. They are still worth reading out loud. A book you have started reopens at the chapter you stopped in."
+      : "Nothing is locked. The level only tells you which units a book leans on, so a level 3 book will feel easier once unit 8 is behind you. A book you have started reopens at the chapter you stopped in."}</p>
   `);
 }
 
@@ -778,7 +892,7 @@ function renderStory(story, pageNumber) {
   const index = story.pages.map((pg, i) => {
     const active = i + 1 === n ? " active" : "";
     const done = i < furthest ? " done" : "";
-    return `<button class="chip${active}${done}" data-go="#/story/${story.id}/${i + 1}"
+    return `<button class="chip${active}${done}" data-go="${h(`story/${story.id}/${i + 1}`)}"
       title="${escapeAttr(pg.title)}" aria-label="Chapter ${i + 1}: ${escapeAttr(pg.title)}">${i + 1}</button>`;
   }).join("");
 
@@ -831,10 +945,10 @@ function renderStory(story, pageNumber) {
       </div>
       ${ending}
       <div class="footer-nav">
-        <button class="btn secondary" data-go="${n > 1 ? `#/story/${story.id}/${n - 1}` : "#/stories"}">${n > 1 ? "Previous chapter" : "All books"}</button>
+        <button class="btn secondary" data-go="${n > 1 ? h(`story/${story.id}/${n - 1}`) : h("stories")}">${n > 1 ? "Previous chapter" : "All books"}</button>
         ${last
           ? `<button class="btn" data-mark-story type="button">Finish the book</button>`
-          : `<button class="btn" data-go="#/story/${story.id}/${n + 1}">Next chapter</button>`}
+          : `<button class="btn" data-go="${h(`story/${story.id}/${n + 1}`)}">Next chapter</button>`}
       </div>
     </div>
     <div class="sheet" id="word-sheet" hidden></div>
@@ -860,7 +974,7 @@ function renderStory(story, pageNumber) {
 
   document.querySelector("[data-mark-story]").addEventListener("click", () => {
     markStory(story.id);
-    go("#/stories");
+    go(h("stories"));
   });
 
   bindExercises(story.questions, "s", (score, total2) => {
@@ -909,16 +1023,19 @@ function closeWordSheet() {
 }
 
 function renderVerbs() {
-  const v = COURSE.verbs[state.verb.i % COURSE.verbs.length];
+  const course = C();
+  const ui = course.ui;
+  const v = course.verbs[state.verb.i % course.verbs.length];
   const person = state.verb.person;
+  const showTense = course.verbs.some((x) => x.tense);
   renderShell(`
     <p class="kicker">Drill · streak ${state.verb.streak}</p>
     <h1>Verb trainer</h1>
-    <p class="lead">A1 lives or dies on these forms. Type the correct present-tense form.</p>
+    <p class="lead">${escapeHtml(ui.verbLead)}</p>
     <div class="card section">
       <p class="kicker">${escapeHtml(v.en)}</p>
       <h2>${escapeHtml(v.inf)}</h2>
-      <p>Person: <strong>${PRONOUNS[person]}</strong></p>
+      <p>Person: <strong>${PRONOUNS[person]}</strong>${v.tense ? ` · <strong>${escapeHtml(v.tense)}</strong>` : ""}</p>
       <input type="text" id="verb-in" autocomplete="off" placeholder="Type the form" />
       <div class="actions">
         <button class="btn" id="verb-check">Check</button>
@@ -927,10 +1044,10 @@ function renderVerbs() {
       <div id="verb-out"></div>
     </div>
     <div class="section">
-      <h3>All A1 verbs in this trainer</h3>
+      <h3>${escapeHtml(ui.verbListTitle)}</h3>
       <div class="table-wrap"><table>
-        <tr><th>Verb</th><th>Meaning</th><th>yo</th><th>tú</th><th>él</th></tr>
-        ${COURSE.verbs.map((x) => `<tr><td>${escapeHtml(x.inf)}</td><td>${escapeHtml(x.en)}</td><td>${escapeHtml(x.forms[0])}</td><td>${escapeHtml(x.forms[1])}</td><td>${escapeHtml(x.forms[2])}</td></tr>`).join("")}
+        <tr>${showTense ? "<th>Tense</th>" : ""}<th>Verb</th><th>Meaning</th><th>yo</th><th>tú</th><th>él</th></tr>
+        ${course.verbs.map((x) => `<tr>${showTense ? `<td>${escapeHtml(x.tense || "")}</td>` : ""}<td>${escapeHtml(x.inf)}</td><td>${escapeHtml(x.en)}</td><td>${escapeHtml(x.forms[0])}</td><td>${escapeHtml(x.forms[1])}</td><td>${escapeHtml(x.forms[2])}</td></tr>`).join("")}
       </table></div>
     </div>
   `);
@@ -959,6 +1076,7 @@ function nextVerb() {
 }
 
 function renderRoute(route) {
+  if (route.view === "catalog") return renderCatalog();
   if (route.view === "how") return renderHow();
   if (route.view === "phrasebook") return renderPhrasebook();
   if (route.view === "stories") return renderStories();
@@ -994,13 +1112,23 @@ let lastRouteKey = null;
 
 function render({ scrollToTop = false } = {}) {
   const route = parseHash();
+  const nextId = route.courseId || (route.view === "catalog" ? null : rememberedCourse());
+  if (nextId && nextId !== activeCourseId) {
+    state.verb.i = 0;
+    state.verb.person = 0;
+    state.verb.streak = 0;
+  }
+  if (nextId) {
+    activeCourseId = nextId;
+    if (route.courseId) rememberCourse(route.courseId);
+  }
   state.view = route.view;
   state.unitId = route.unitId || null;
   state.lessonId = route.lessonId || null;
   state.storyId = route.storyId || null;
   state.menuOpen = state.menuOpen && window.innerWidth <= 860;
 
-  const routeKey = [route.view, route.unitId, route.lessonId, route.storyId, route.storyPage].join("|");
+  const routeKey = [activeCourseId, route.view, route.unitId, route.lessonId, route.storyId, route.storyPage].join("|");
   const routeChanged = routeKey !== lastRouteKey;
   lastRouteKey = routeKey;
 

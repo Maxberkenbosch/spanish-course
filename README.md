@@ -1,6 +1,12 @@
-# Camino A1 — beginner Spanish
+# Camino — Spanish A1 and A2
 
-A complete **CEFR A1** Spanish course. When you finish the units, pass the quizzes, and pass the final exam, you will be at A1: you can introduce yourself, handle everyday needs, and have a simple conversation if the other person speaks slowly.
+Two courses in one app.
+
+**A1** gets you through everyday Spanish: you can introduce yourself, handle shops, food, and directions, and have a simple conversation if the other person speaks slowly.
+
+**A2** starts where A1 ends. You can say what happened, describe how things used to be, ask for things with pronouns and commands, compare, and talk about plans.
+
+Open the app and pick a level. Progress for each course stays separate on this device. Older A1 links (`#/unit/u1`, `#/exam`) still open A1.
 
 ## Open the course
 
@@ -83,3 +89,22 @@ Books live in `js/stories.js`, as chapters of paragraphs of sentences. Words are
 | 10 Tiempo libre | Hobbies, weather, plans |
 
 This course teaches international Spanish. *Vosotros* is shown for Spain; *ustedes* is the form to use if you are unsure.
+
+## A2 course map
+
+A2 assumes the A1 course: present tense, *ser / estar*, *gustar*, and *ir a + infinitive*. About **60–80 hours**.
+
+| Unit | Topic |
+| --- | --- |
+| 1 Ayer | Regular preterite |
+| 2 Fue así | Irregular preterite, a trip |
+| 3 Antes | Imperfect: habits and scenes |
+| 4 Aquella noche | Preterite vs imperfect |
+| 5 Ya lo he hecho | Present perfect |
+| 6 Se lo dije | Object pronouns |
+| 7 Hazlo | Commands |
+| 8 Mejor que | Comparison and opinions |
+| 9 Por y para | Reasons, purpose, travel |
+| 10 El año que viene | Future, obligations, how long |
+
+`node tools/check-course.mjs` checks both courses.

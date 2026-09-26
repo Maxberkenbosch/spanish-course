@@ -1,7 +1,55 @@
 const COURSE = {
+  id: "a1",
+  level: "A1",
   title: "Camino A1",
   hours: "50–70",
+  summary: "Survive everyday Spanish when people speak slowly: greetings, family, food, the city, and simple plans.",
   goal: "Reach CEFR A1: survive everyday Spanish when people speak slowly and clearly.",
+  ui: {
+    homeKicker: "Self-paced Spanish",
+    homeTitle: "From zero to A1.",
+    homeLead: "Finish this course and you will be able to introduce yourself, handle shops, food, directions, and simple plans — the official CEFR A1 level. About 50–70 hours if you speak out loud and do every exercise.",
+    navHow: "How to reach A1",
+    navExam: "Final A1 exam",
+    howKicker: "Method",
+    howTitle: "How to actually reach A1",
+    howLead: "A1 is not “I watched some videos.” It means you can do the jobs below, slowly, with mistakes, when the other person helps you.",
+    howCanDoTitle: "What A1 speakers can do",
+    howCanDo: [
+      "Introduce themselves and ask basic personal questions",
+      "Talk about family, home, work or studies, and daily routine",
+      "Order food, shop, and ask where something is",
+      "Understand set phrases if people speak slowly and clearly",
+      "Write a few short sentences about their life"
+    ],
+    howTimeTitle: "A realistic timetable",
+    howTimeHtml: "Instituto Cervantes-style A1 is roughly 60–90 classroom hours. Alone, plan <strong>50–70 focused hours</strong>.",
+    howTimeItems: [
+      "<strong>45 minutes a day for 10 weeks</strong> — the steady path",
+      "<strong>90 minutes a day for 5 weeks</strong> — faster",
+      "One unit every 4–6 days: lesson → speak the dialogues → practice → quiz (75% to pass)"
+    ],
+    howRulesTitle: "Rules that make this work",
+    howRules: [
+      "Press ▶ and repeat every new word out loud. Silent study does not become speaking.",
+      "Write answers yourself. Do not peek, then immediately retry the ones you missed.",
+      "After each unit, record yourself doing the “can-do” list on the unit page.",
+      "Pass all 10 quizzes and the final exam at 75% or higher.",
+      "Then do the speaking and writing prompts without notes. That is A1 in real life."
+    ],
+    howNote: "This course uses international Spanish: <em>tú</em> and <em>ustedes</em>. <em>Vosotros</em> appears in tables because you will see it in Spain. Accents are taught; answers accept them with or without marks.",
+    examKicker: "DELE-style checkpoint",
+    examTitle: "Final A1 exam",
+    examLead: "{n} scored items covering the whole course. 75% is a pass — the level you wanted. Then do the speaking and writing tasks out loud / on paper. Those are not auto-scored on purpose.",
+    examPassKicker: "A1 reached",
+    examFailKicker: "Not yet",
+    examPass: "That is A1 on the grammar and vocabulary this course teaches. Finish the speaking and writing prompts to make it real.",
+    examFail: "Below 75%. Revisit the weakest units, then retake. A1 is close — do not skip the missed items.",
+    verbLead: "A1 lives or dies on these forms. Type the correct present-tense form.",
+    verbListTitle: "All A1 verbs in this trainer",
+    phraseKicker: "Carry these",
+    phraseLead: "Memorize these before you travel. Tap ▶ and copy the melody of the sentence."
+  },
   units: [
     {
       id: "u1",
